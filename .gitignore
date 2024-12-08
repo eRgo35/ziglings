@@ -6,3 +6,8 @@
 
 # Leave this in here for older zig versions
 /zig-cache/
+
+# Nix
+result
+result-*
+/.direnv/
