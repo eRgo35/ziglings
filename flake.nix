@@ -1,52 +1,50 @@
 {
+  description = "Zig compiler development.";
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    systems.url = "github:nix-systems/default";
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
+    flake-utils.url = "github:numtide/flake-utils";
+
+    # Used for shell.nix
+    flake-compat = {
+      url = "github:edolstra/flake-compat";
+      flake = false;
     };
   };
 
-  outputs =
-    {
-      self,
-      systems,
-      nixpkgs,
-      treefmt-nix,
-      ...
-    }@inputs:
-    let
-      eachSystem = f: nixpkgs.lib.genAttrs (import systems) (system: f nixpkgs.legacyPackages.${system});
+  outputs = {
+    self,
+    nixpkgs,
+    flake-utils,
+    ...
+  } @ inputs:
+    flake-utils.lib.eachDefaultSystem (
+      system: let
+        pkgs = import nixpkgs {inherit system;};
+      in {
+        devShells.default = pkgs.mkShell {
+          nativeBuildInputs = with pkgs;
+            [
+              cmake
+              gdb
+              libxml2
+              ninja
+              qemu
+              wasmtime
+              zlib
+            ]
+            ++ (with llvmPackages_18; [
+              clang
+              clang-unwrapped
+              lld
+              llvm
+            ]);
 
-      treefmtEval = eachSystem (pkgs: treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
-    in
-    {
-      packages = eachSystem (pkgs: {
-        # default = pkgs.hello;
-      });
+          hardeningDisable = ["all"];
+        };
 
-      devShells = eachSystem (pkgs: {
-        default = pkgs.mkShell (
-          with pkgs;
-          {
-            buildInputs = [
-              zig
-              zls
-              # You can add `just` to invoke `zig run`, `zig build-exe`, etc
-              # with specific arguments.
-            ];
-          }
-        );
-      });
-
-      # Run `nix fmt [FILE_OR_DIR]...` to execute formatters configured in treefmt.nix.
-      formatter = eachSystem (pkgs: treefmtEval.${pkgs.system}.config.build.wrapper);
-
-      checks = eachSystem (pkgs: {
-        # Throws an error if any of the source files are not correctly formatted
-        # when you run `nix flake check --print-build-logs`. Useful for CI
-        formatting = treefmtEval.${pkgs.system}.config.build.check self;
-      });
-    };
+        # For compatibility with older versions of the `nix` binary
+        devShell = self.devShells.${system}.default;
+      }
+    );
 }
